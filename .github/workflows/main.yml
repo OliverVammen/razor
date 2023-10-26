@@ -1,0 +1,62 @@
+# This workflow will build a .NET project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
+# ---- Denne virker fint. Kræver dog at jeg først fra IIS manager RECYCLE app pool. ---------------
+name: razor.junoeuro.dk
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 3.1
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --self-contained true            
+    - name: publish
+      run: dotnet publish -c Release -r win-x86 --output ./myFolderToPublish/
+    - name: Test
+      run: dotnet test --no-build --verbosity normal 
+ 
+ # *** Publish Pixata.Blazor.Sample ***
+    - name: Rename _app_offline.htm to app_offline.htm to stop the site
+      shell: python
+      run: |
+        import ftplib
+        with ftplib.FTP('nt26.unoeuro.com') as ftp:
+          ftp.login('ojbeatz.dk', '${{ secrets.ftp_password }}')
+          ftp.cwd('/razor')
+          ftp.rename('_app_offline.htm', 'app_offline.htm')
+          ftp.quit()
+ 
+
+      # ----------FTP---------Here is the deployment action-------------
+    - name: Upload from public_html 
+      uses: SamKirkland/FTP-Deploy-Action@4.3.3
+      with:
+        local-dir: ./myFolderToPublish/
+        server: nt26.unoeuro.com
+        username: ojbeatz.dk
+        password: ${{ secrets.ftp_password }}
+        server-dir: razor/ 
+        dangerous-clean-slate: false
+
+    - name: Rename app_offline.htm back to _app_offline.htm to start the site
+      shell: python
+      run: |
+        import ftplib
+        with ftplib.FTP('nt26.unoeuro.com') as ftp:
+          ftp.login('ojbeatz.dk', '${{ secrets.ftp_password }}')
+          ftp.cwd('/razor')
+          ftp.rename('app_offline.htm', '_app_offline.htm')
+          ftp.quit()
